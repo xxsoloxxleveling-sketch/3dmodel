@@ -46,6 +46,9 @@
         <canvas id="minimap-canvas"></canvas>
     </div>
 
+    <!-- Door Interaction Prompt -->
+    <div id="door-prompt">🚪 Press <b>[E]</b> to Open Door</div>
+
     <!-- Mobile Virtual Joystick & Touch Pad -->
     <div id="mobile-controls">
         <div id="joystick-zone">
@@ -53,6 +56,7 @@
         </div>
         <div id="touch-look-zone"></div>
         <div id="mobile-actions">
+            <button id="mbtn-door" class="mobile-btn" style="background:#0284c7; display:none;">DOOR</button>
             <button id="mbtn-jump" class="mobile-btn">JUMP</button>
             <button id="mbtn-sprint" class="mobile-btn">RUN</button>
             <button id="mbtn-view" class="mobile-btn">1P</button>
@@ -105,6 +109,10 @@
                 <span class="key-badge">L</span>
                 <span>Day / Sunset / Night</span>
             </div>
+            <div class="key-item">
+                <span class="key-badge">E</span>
+                <span>Open / Close Door</span>
+            </div>
         </div>
 
         <button id="btn-start-game" class="start-btn">Click to Enter & Explore</button>
@@ -121,6 +129,7 @@
     <script src="js/lib/three.min.js"></script>
     <script src="js/lib/GLTFLoader.js"></script>
     <script src="js/controls.js"></script>
+    <script src="js/doors.js"></script>
     <script src="js/player.js"></script>
     <script src="js/tour.js"></script>
     <script src="js/minimap.js"></script>

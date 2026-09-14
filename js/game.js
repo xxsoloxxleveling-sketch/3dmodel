@@ -80,7 +80,11 @@ class HouseGame {
 
         this.player = new Player(this.scene, this.camera, this.controls);
 
-        // 5. Tour & Minimap
+        // 5. Tour & Minimap & Doors
+        this.doors = new DoorManager(this.scene, this.player);
+        this.player.setDoorManager(this.doors);
+        this.controls.onInteract = () => this.doors.toggleNearestDoor();
+
         this.tour = new TourManager(this.camera, this.player, (roomName, floor, desc) => {
             if (this.roomTitle && this.roomDesc) {
                 this.roomTitle.textContent = `${roomName} (${floor})`;
@@ -250,13 +254,33 @@ class HouseGame {
                         if (child.material) {
                             child.material.side = THREE.DoubleSide;
                             if (child.material.map) {
-                                child.material.map.anisotropy = 8;
+                                child.material.map.wrapS = THREE.RepeatWrapping;
+                                child.material.map.wrapT = THREE.RepeatWrapping;
+                                child.material.map.anisotropy = 16;
+                                child.material.map.needsUpdate = true;
                             }
-                            if (child.material.name.includes('Glass') || child.material.opacity < 0.9) {
+                            
+                            const matName = (child.material.name || '').toLowerCase();
+                            if (matName.includes('glass') || child.material.opacity < 0.9) {
                                 child.material.transparent = true;
-                                child.material.roughness = 0.1;
-                                child.material.metalness = 0.1;
+                                child.material.opacity = 0.45;
+                                child.material.roughness = 0.05;
+                                child.material.metalness = 0.9;
+                                child.material.color.setHex(0xd0e8ff);
+                            } else if (matName.includes('metal') || matName.includes('roof')) {
+                                child.material.roughness = 0.35;
+                                child.material.metalness = 0.65;
+                            } else if (matName.includes('wood') || matName.includes('hardwood')) {
+                                child.material.roughness = 0.3;
+                                child.material.metalness = 0.05;
+                            } else if (matName.includes('brick') || matName.includes('chimney')) {
+                                child.material.roughness = 0.85;
+                                child.material.metalness = 0.02;
+                            } else if (matName.includes('clapboard') || matName.includes('siding')) {
+                                child.material.roughness = 0.65;
+                                child.material.metalness = 0.02;
                             }
+                            child.material.needsUpdate = true;
                         }
                     }
                 });
@@ -437,6 +461,18 @@ class HouseGame {
                 this.toggleCamera();
             });
         }
+
+        const mbtnDoor = document.getElementById('mbtn-door');
+        if (mbtnDoor) {
+            mbtnDoor.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (this.doors) this.doors.toggleNearestDoor();
+            });
+            mbtnDoor.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this.doors) this.doors.toggleNearestDoor();
+            });
+        }
     }
 
     detectPlayerRoom() {
@@ -508,6 +544,11 @@ class HouseGame {
         requestAnimationFrame(() => this.animate());
 
         const delta = this.clock.getDelta();
+
+        // Update doors animation and proximity
+        if (this.doors) {
+            this.doors.update(delta, this.player.position);
+        }
 
         // Update active movement or tour
         if (this.tour.isActive) {

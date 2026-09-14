@@ -88,6 +88,9 @@ class ControlsManager {
                 case 'KeyL':
                     if (this.onToggleLights) this.onToggleLights();
                     break;
+                case 'KeyE':
+                    if (this.onInteract) this.onInteract();
+                    break;
             }
         });
 
@@ -249,30 +252,33 @@ class ControlsManager {
         this.moveLeft = normX < -deadzone;
         this.moveRight = normX > deadzone;
 
-        this.joystickDelta = { x: normX, y: normY };
+        // Invert Y so pushing UP (negative screen Y) gives positive forward (+1)
+        this.joystickDelta = { x: normX, y: -normY };
     }
 
     // Returns movement vector in local camera space
+    // forward: +1 for forward, -1 for backward
+    // right: +1 for right, -1 for left
     getMovementVector() {
-        const moveVec = { x: 0, z: 0 };
+        let forward = 0;
+        let right = 0;
 
         if (this.joystickTouchId !== null) {
-            moveVec.x = this.joystickDelta.x;
-            moveVec.z = this.joystickDelta.y;
+            forward = this.joystickDelta.y;
+            right = this.joystickDelta.x;
         } else {
-            if (this.moveForward) moveVec.z -= 1;
-            if (this.moveBackward) moveVec.z += 1;
-            if (this.moveLeft) moveVec.x -= 1;
-            if (this.moveRight) moveVec.x += 1;
+            if (this.moveForward) forward += 1;
+            if (this.moveBackward) forward -= 1;
+            if (this.moveRight) right += 1;
+            if (this.moveLeft) right -= 1;
 
-            // Normalize diagonal movement
-            const len = Math.sqrt(moveVec.x * moveVec.x + moveVec.z * moveVec.z);
+            const len = Math.sqrt(forward * forward + right * right);
             if (len > 0) {
-                moveVec.x /= len;
-                moveVec.z /= len;
+                forward /= len;
+                right /= len;
             }
         }
 
-        return moveVec;
+        return { forward, right };
     }
 }
