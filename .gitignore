@@ -5,3 +5,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.log
+/downloaded.pdf
+/pdf_pages/
+/textures/
+assets/textures/rendering_*.png

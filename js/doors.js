@@ -68,79 +68,190 @@ class DoorManager {
     }
 
     initDoors() {
-        // Shared Wood Door Material
+        this.initDoorsForHouse('caroline');
+    }
+
+    initDoorsForHouse(houseId) {
+        // Clean up previous doors from scene
+        if (this.doors) {
+            this.doors.forEach(d => {
+                if (d.pivot && d.pivot.parent) {
+                    d.pivot.parent.remove(d.pivot);
+                }
+            });
+        }
+        this.doors = [];
+        this.nearestDoor = null;
+
+        // Shared Rich Wood Door Material with raised panel texture
+        const texLoader = new THREE.TextureLoader();
+        const doorTex = texLoader.load('assets/textures/door_wood_diffuse.png');
+        doorTex.wrapS = THREE.RepeatWrapping;
+        doorTex.wrapT = THREE.RepeatWrapping;
+
         const doorWoodMat = new THREE.MeshStandardMaterial({
-            color: 0x8b5a2b, // warm cedar / chestnut wood
-            roughness: 0.6,
+            map: doorTex,
+            color: 0xffffff,
+            roughness: 0.4,
             metalness: 0.05
         });
 
-        // Shared Brass Knob Material
+        // Shared Brass Lever/Knob Material
         const knobMat = new THREE.MeshStandardMaterial({
-            color: 0xd4af37, // brass gold
+            color: 0xd4af37, // polished brass
             roughness: 0.25,
             metalness: 0.85
         });
 
-        // Standard door configurations for the farmhouse
-        const doorConfigs = [
-            {
-                id: 'front_door',
-                name: 'Front Entry Door',
-                x: 0.0, y: 0.44, z: 18.0, // Main front doorway into living room
-                width: 0.96, height: 2.15, thickness: 0.05,
-                hingeSide: -1, // -1 = left hinge, 1 = right hinge
-                openAngle: -Math.PI / 2, // swings inward into room
-                rotY: 0
-            },
-            {
-                id: 'back_door',
-                name: 'Rear Deck Door',
-                x: 0.0, y: 0.44, z: 8.5, // Back doorway onto rear yard/deck
-                width: 0.92, height: 2.15, thickness: 0.05,
-                hingeSide: 1,
-                openAngle: Math.PI / 2,
-                rotY: 0
-            },
-            {
-                id: 'powder_door',
-                name: 'Downstairs Bath Door',
-                x: 2.2, y: 0.44, z: 12.0,
-                width: 0.80, height: 2.05, thickness: 0.045,
-                hingeSide: -1,
-                openAngle: -Math.PI / 2,
-                rotY: Math.PI / 2
-            },
-            {
-                id: 'master_bed_door',
-                name: 'Master Bedroom Door',
-                x: -0.6, y: 2.82, z: 13.5, // 2nd floor landing to master
-                width: 0.82, height: 2.05, thickness: 0.045,
-                hingeSide: -1,
-                openAngle: -Math.PI / 2,
-                rotY: 0
-            },
-            {
-                id: 'bed2_door',
-                name: 'Bedroom 2 Door',
-                x: 0.6, y: 2.82, z: 13.5, // 2nd floor landing to bed 2
-                width: 0.82, height: 2.05, thickness: 0.045,
-                hingeSide: 1,
-                openAngle: Math.PI / 2,
-                rotY: 0
-            },
-            {
-                id: 'upstairs_bath_door',
-                name: 'Upstairs Bath Door',
-                x: 0.0, y: 2.82, z: 11.2, // 2nd floor bath
-                width: 0.80, height: 2.05, thickness: 0.045,
-                hingeSide: -1,
-                openAngle: -Math.PI / 2,
-                rotY: 0
-            }
-        ];
+        // Model-specific architectural door placements
+        const houseDoorConfigs = {
+            'georgia': [
+                {
+                    id: 'front_door',
+                    name: 'Front Entry Door',
+                    x: 2.75, y: 0.44, z: 17.11, // Front doorway on right side of porch
+                    width: 0.92, height: 2.15, thickness: 0.05,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'rear_door',
+                    name: 'Rear Addition Door',
+                    x: 3.55, y: 0.44, z: 12.25,
+                    width: 0.88, height: 2.10, thickness: 0.045,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: Math.PI / 2
+                },
+                {
+                    id: 'powder_door',
+                    name: 'Downstairs Bath Door',
+                    x: 1.70, y: 0.44, z: 12.42,
+                    width: 0.80, height: 2.05, thickness: 0.045,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'master_bed_door',
+                    name: 'Master Bedroom Door',
+                    x: 0.55, y: 2.82, z: 13.93,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'bed2_door',
+                    name: 'Bedroom 2 Door',
+                    x: -1.25, y: 2.82, z: 13.93,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: 0
+                }
+            ],
+            'caroline': [
+                {
+                    id: 'front_door',
+                    name: 'Front Entry Door',
+                    x: 0.0, y: 0.44, z: 17.11, // Central front entry
+                    width: 0.96, height: 2.15, thickness: 0.05,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'back_door',
+                    name: 'Rear Deck Door',
+                    x: 0.0, y: 0.44, z: 9.1,
+                    width: 0.92, height: 2.15, thickness: 0.05,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'master_bed_door',
+                    name: 'Master Bedroom Door',
+                    x: -0.6, y: 2.82, z: 13.5,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'bed2_door',
+                    name: 'Bedroom 2 Door',
+                    x: 0.6, y: 2.82, z: 13.5,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: 0
+                }
+            ],
+            'marilyn': [
+                {
+                    id: 'front_door',
+                    name: 'Front Entry Door',
+                    x: 0.0, y: 0.44, z: 17.11,
+                    width: 0.96, height: 2.15, thickness: 0.05,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'back_door',
+                    name: 'Rear Deck Door',
+                    x: 0.0, y: 0.44, z: 9.1,
+                    width: 0.92, height: 2.15, thickness: 0.05,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: 0
+                }
+            ],
+            'virginia': [
+                {
+                    id: 'front_door',
+                    name: 'Front Entry Door',
+                    x: 2.75, y: 0.44, z: 17.11,
+                    width: 0.92, height: 2.15, thickness: 0.05,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'rear_door',
+                    name: 'Rear Addition Door',
+                    x: 3.55, y: 0.44, z: 12.25,
+                    width: 0.88, height: 2.10, thickness: 0.045,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: Math.PI / 2
+                },
+                {
+                    id: 'master_bed_door',
+                    name: 'Master Bedroom Door',
+                    x: 0.55, y: 2.82, z: 13.93,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: -1,
+                    openAngle: -Math.PI / 2,
+                    rotY: 0
+                },
+                {
+                    id: 'bed2_door',
+                    name: 'Bedroom 2 Door',
+                    x: -1.25, y: 2.82, z: 13.93,
+                    width: 0.82, height: 2.05, thickness: 0.045,
+                    hingeSide: 1,
+                    openAngle: Math.PI / 2,
+                    rotY: 0
+                }
+            ]
+        };
 
-        doorConfigs.forEach(cfg => {
+        const configs = houseDoorConfigs[houseId] || houseDoorConfigs['caroline'];
+        configs.forEach(cfg => {
             const doorObj = this.createDoorMesh(cfg, doorWoodMat, knobMat);
             this.scene.add(doorObj.pivot);
             this.doors.push(doorObj);
@@ -190,6 +301,7 @@ class DoorManager {
             currentAngle: 0,
             targetAngle: 0,
             openAngle: cfg.openAngle,
+            rotY: cfg.rotY || 0,
             centerPos: new THREE.Vector3(cfg.x, cfg.y + cfg.height / 2, cfg.z),
             width: cfg.width,
             height: cfg.height
@@ -214,7 +326,7 @@ class DoorManager {
             // Animate door swing towards target angle
             if (Math.abs(door.currentAngle - door.targetAngle) > 0.001) {
                 door.currentAngle += (door.targetAngle - door.currentAngle) * 8.0 * delta;
-                door.pivot.rotation.y = door.currentAngle;
+                door.pivot.rotation.y = door.rotY + door.currentAngle;
                 door.updateBox();
             }
 

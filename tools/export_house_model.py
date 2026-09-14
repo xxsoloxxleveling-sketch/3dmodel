@@ -12,6 +12,12 @@ os.add_dll_directory(importer_dir)
 import sketchup
 
 SKIP_LAYERS = {
+    '90 Furniture People',
+    '91 FurnPeep Split',
+    'Massing Study',
+    '00 Ground',
+    'Door - Plan',
+    'Door - Dash',
     '22 - Windows in Plan',
     '91 - 1st Floor Plan Cut',
     '92 - 2nd Floor Plan Cut',
@@ -19,14 +25,10 @@ SKIP_LAYERS = {
     '92 - Work Ceiling Cut',
     '93 - Work Trans Sctn',
     '94 - Work Long Sctn',
-    'Door - Plan',
-    'Door - Dash',
     'Watermark',
-    'Guidelines'
+    'Guidelines',
+    'Porch Screen'
 }
-
-# Names of door components to separate from static geometry
-DOOR_KEYWORDS = {'door', 'swing', 'hinged'}
 
 def export_skp_to_glb(skp_path, output_glb_path, textures_dir):
     print(f"\nProcessing: {skp_path}")
@@ -41,93 +43,109 @@ def export_skp_to_glb(skp_path, output_glb_path, textures_dir):
 
     model = sketchup.Model.from_file(skp_path)
 
-    # Load high-res PBR textures
+    # Load 1024x1024 diffuse textures
     textures = {
         'clapboard': Image.open(os.path.join(textures_dir, "clapboard_diffuse.png")).convert('RGBA'),
+        'porch_deck': Image.open(os.path.join(textures_dir, "porch_deck_diffuse.png")).convert('RGBA'),
+        'porch_ceiling': Image.open(os.path.join(textures_dir, "porch_ceiling_diffuse.png")).convert('RGBA'),
         'hardwood': Image.open(os.path.join(textures_dir, "hardwood_diffuse.png")).convert('RGBA'),
         'metal_roof': Image.open(os.path.join(textures_dir, "metal_roof_diffuse.png")).convert('RGBA'),
         'brick': Image.open(os.path.join(textures_dir, "brick_diffuse.png")).convert('RGBA'),
-        'porch_deck': Image.open(os.path.join(textures_dir, "porch_deck_diffuse.png")).convert('RGBA'),
         'interior_wall': Image.open(os.path.join(textures_dir, "interior_wall_diffuse.png")).convert('RGBA'),
     }
 
-    # Material buckets
     buckets = {
         'clapboard': {'verts': [], 'faces': [], 'uvs': []},
+        'porch_deck': {'verts': [], 'faces': [], 'uvs': []},
+        'porch_ceiling': {'verts': [], 'faces': [], 'uvs': []},
         'hardwood': {'verts': [], 'faces': [], 'uvs': []},
         'metal_roof': {'verts': [], 'faces': [], 'uvs': []},
         'brick': {'verts': [], 'faces': [], 'uvs': []},
-        'porch_deck': {'verts': [], 'faces': [], 'uvs': []},
         'interior_wall': {'verts': [], 'faces': [], 'uvs': []},
-        'glass': {'verts': [], 'faces': [], 'uvs': []},
         'trim_white': {'verts': [], 'faces': [], 'uvs': []},
+        'glass': {'verts': [], 'faces': [], 'uvs': []},
         'fixtures': {'verts': [], 'faces': [], 'uvs': []},
     }
 
-    # Track door locations for door placement
-    detected_doors = []
+    def classify(v_w, normal, mat_name, layer_name, comp_name):
+        ml = (mat_name or '').lower()
+        cl = comp_name.lower()
+        ll = layer_name.lower()
 
-    def classify_face(v_world, normal, mat_name, layer_name, comp_name):
-        comp_lower = comp_name.lower()
-        layer_lower = layer_name.lower()
-        mat_lower = mat_name.lower() if mat_name else ''
-
-        # Glass
-        if 'glass' in mat_lower or 'translucent' in mat_lower or 'glass' in comp_lower or 'translucent' in layer_lower:
-            return 'glass'
-
-        # Brick / Chimney
-        if 'brick' in mat_lower or 'chimney' in layer_lower or 'chimney' in comp_lower:
+        # 1. Explicit SketchUp Materials
+        if 'clapboard' in ml or 'siding' in cl:
+            return 'clapboard'
+        if 'roof' in ml or 'metal' in ml or 'roof' in cl or 'roof' in ll:
+            return 'metal_roof'
+        if 'brick' in ml or 'chimney' in cl or 'chimney' in ll:
             return 'brick'
-
-        # Fixtures (Plumbing / Lights)
-        if 'fixture' in layer_lower or 'bath' in comp_lower or 'bowl' in comp_lower or 'tank' in comp_lower or 'light' in comp_lower:
+        if 'glass' in ml or 'translucent' in ml or 'glass' in cl or 'translucent' in ll:
+            return 'glass'
+        if 'beadboard' in ml or 'soffit' in cl:
+            return 'porch_ceiling'
+        if 'silver' in ml or 'lever' in ml or 'louver' in ml or 'fixture' in ll or 'light' in cl or 'bath' in cl or 'stove' in ml or 'stove' in cl:
             return 'fixtures'
 
-        # Trim & Gingerbread
-        if 'trim' in comp_lower or 'gingerbread' in comp_lower or 'rafter' in comp_lower or 'bracket' in comp_lower:
-            return 'trim_white'
+        # 2. Geometry coordinates and normals
+        ny = normal[1]
+        abs_ny = abs(ny)
+        xm = float(v_w[:, 0].mean())
+        ym = float(v_w[:, 1].mean())
+        zm = float(v_w[:, 2].mean())
 
-        ny = abs(normal[1]) # Y is up in Three.js coordinates
-        y_pos = v_world[:, 1].mean()
-        z_pos = v_world[:, 2].mean()
-        x_pos = v_world[:, 0].mean()
-
-        # Roof: High elevation + sloped faces
-        if (y_pos >= 3.0 and 0.15 <= ny <= 0.85) or 'roof' in comp_lower or 'roof' in layer_lower:
+        # Sloped roofs (Y >= 2.5 and sloped)
+        if ym >= 2.5 and 0.15 <= abs_ny <= 0.88:
             return 'metal_roof'
 
-        # Floors: Horizontal faces facing up
-        if normal[1] > 0.8:
-            if z_pos >= 17.5 or 'porch' in comp_lower:
+        # Horizontal UP surfaces (Floors / Decking)
+        if ny > 0.7:
+            # Check if exterior porch or balcony
+            if zm >= 14.2 or zm <= 8.6 or abs(xm) >= 3.8 or 'porch' in cl or 'deck' in cl:
                 return 'porch_deck'
             return 'hardwood'
 
-        # Ceilings: Horizontal faces facing down
-        if normal[1] < -0.8:
+        # Horizontal DOWN surfaces (Ceilings / Eaves)
+        if ny < -0.7:
+            # Exterior porch ceiling or roof soffit overhang
+            if zm >= 14.2 or zm <= 8.6 or abs(xm) >= 3.7 or 'porch' in cl or 'soffit' in cl:
+                return 'porch_ceiling'
             return 'interior_wall'
 
-        # Vertical walls:
-        # Exterior vs Interior
-        is_exterior = (abs(x_pos) >= 4.2 or z_pos >= 17.5 or z_pos <= 8.5) or '09 finishes' in layer_lower or 'siding' in comp_lower
-        if is_exterior:
-            return 'clapboard'
-        else:
+        # Trim, Gingerbread, Railings, Posts, Columns, Balusters, Shutters
+        if any(k in cl for k in ('trim', 'gingerbread', 'rafter', 'bracket', 'post', 'column', 'spindle', 'rail', 'baluster', 'fascia', 'shutter')) or 'shutter' in ll or 'trim' in ll:
+            return 'trim_white'
+
+        # Vertical walls (|ny| < 0.4)
+        if abs_ny < 0.4:
+            # Front exterior walls: facing front (+Z) at or near porch/front facade
+            if normal[2] > 0.3 and zm >= 13.5:
+                return 'clapboard'
+            # Rear exterior walls: facing rear (-Z)
+            if normal[2] < -0.3 and zm <= 9.2:
+                return 'clapboard'
+            # Side exterior walls on wings or gable ends
+            if abs(normal[0]) > 0.3 and (abs(xm) >= 3.6 or zm >= 14.0 or ym >= 4.0):
+                return 'clapboard'
+            # Any face in finishes layer
+            if 'finish' in ll:
+                return 'clapboard'
+            # Interior room partition wall
             return 'interior_wall'
 
-    def traverse(entities, transform=np.eye(4), layer_name='Default', comp_name=''):
+        return 'trim_white'
+
+    def traverse(entities, transform=np.eye(4), layer_name='Default', comp_name='', parent_mat=None):
         for f in entities.faces:
             vs, tri, uvs = f.tessfaces
             if not tri: continue
 
-            # Convert vertices to Three.js coordinates (X, Z_skp, -Y_skp)
+            # Convert to Three.js coordinates
             v_w = []
             for v in vs:
                 pt = transform @ np.array([v[0], v[1], v[2], 1.0])
                 v_w.append([pt[0], pt[2], -pt[1]])
             v_w = np.array(v_w, dtype=np.float32)
 
-            # Compute normal in Three.js coordinates
             if len(v_w) >= 3:
                 e1 = v_w[tri[0][1]] - v_w[tri[0][0]]
                 e2 = v_w[tri[0][2]] - v_w[tri[0][0]]
@@ -137,28 +155,34 @@ def export_skp_to_glb(skp_path, output_glb_path, textures_dir):
             else:
                 normal = np.array([0, 1, 0], dtype=np.float32)
 
-            mat_name = f.material.name if f.material else ''
-            category = classify_face(v_w, normal, mat_name, layer_name, comp_name)
+            mat_name = f.material.name if f.material else parent_mat
+            cat = classify(v_w, normal, mat_name, layer_name, comp_name)
 
-            b = buckets[category]
+            b = buckets[cat]
             base_v = len(b['verts'])
 
-            # Generate seamless planar UVs based on world coordinates
-            # Scale UVs so textures repeat realistically (e.g. 1m = 1 texture repeat)
+            # Planar UV mapping scaled for seamless architectural repeat
             for pt in v_w:
-                if category in ('clapboard', 'interior_wall'):
-                    # Vertical wall: UV along horizontal axis and height Y
-                    uv_x = pt[0] if abs(normal[0]) < abs(normal[2]) else pt[2]
-                    uv_y = pt[1]
-                    uv = [uv_x * 0.5, uv_y * 0.5]
-                elif category in ('hardwood', 'porch_deck'):
-                    # Floor: UV along X and Z
-                    uv = [pt[0] * 0.6, pt[2] * 0.6]
-                elif category == 'metal_roof':
-                    # Roof: UV along ridge / slope
-                    uv = [pt[0] * 0.5, (pt[1] + pt[2]) * 0.5]
-                elif category == 'brick':
-                    uv = [(pt[0] + pt[2]) * 0.8, pt[1] * 0.8]
+                if cat == 'clapboard':
+                    # Siding: U along horizontal wall span, V along height Y
+                    # 1 repeat per 1.0 meter (each 1024px tile has 8 planks = 0.125m exposure)
+                    u = pt[0] if abs(normal[0]) < abs(normal[2]) else pt[2]
+                    v = pt[1]
+                    uv = [u * 1.0, v * 1.0]
+                elif cat == 'porch_deck':
+                    uv = [pt[0] * 1.0, pt[2] * 1.0]
+                elif cat == 'porch_ceiling':
+                    uv = [pt[0] * 1.5, pt[2] * 1.5]
+                elif cat == 'hardwood':
+                    uv = [pt[0] * 1.2, pt[2] * 1.2]
+                elif cat == 'metal_roof':
+                    uv = [pt[0] * 0.8, (pt[1] * 0.707 + pt[2] * 0.707) * 0.8]
+                elif cat == 'brick':
+                    u = pt[0] if abs(normal[0]) < abs(normal[2]) else pt[2]
+                    uv = [u * 1.2, pt[1] * 1.2]
+                elif cat == 'interior_wall':
+                    u = pt[0] if abs(normal[0]) < abs(normal[2]) else pt[2]
+                    uv = [u * 0.5, pt[1] * 0.5]
                 else:
                     uv = [pt[0] * 0.5, pt[1] * 0.5]
 
@@ -170,75 +194,115 @@ def export_skp_to_glb(skp_path, output_glb_path, textures_dir):
 
         for g in entities.groups:
             if getattr(g, 'hidden', False): continue
-            g_layer = g.layer.name if g.layer else layer_name
-            if g_layer in SKIP_LAYERS: continue
+            gl = g.layer.name if g.layer else layer_name
+            if gl in SKIP_LAYERS: continue
             g_mat = np.array(g.transform) if getattr(g, 'transform', None) else np.eye(4)
-            traverse(g.entities, transform @ g_mat, g_layer, g.name or comp_name)
+            mat = g.material.name if g.material else parent_mat
+            traverse(g.entities, transform @ g_mat, gl, g.name or comp_name, mat)
 
         for inst in entities.instances:
             if getattr(inst, 'hidden', False): continue
-            i_layer = inst.layer.name if inst.layer else layer_name
-            if i_layer in SKIP_LAYERS: continue
+            il = inst.layer.name if inst.layer else layer_name
+            if il in SKIP_LAYERS: continue
             i_mat = np.array(inst.transform) if getattr(inst, 'transform', None) else np.eye(4)
-            inst_def_name = inst.definition.name
+            inst_name = inst.definition.name
 
-            # Check if this is a door panel: record its location
-            if any(k in inst_def_name.lower() for k in DOOR_KEYWORDS):
-                center = transform @ i_mat @ np.array([0, 0, 0, 1.0])
-                detected_doors.append({
-                    'name': inst_def_name,
-                    'pos': [float(center[0]), float(center[2]), float(-center[1])]
-                })
-                # Skip static door panel so doorway is openable
-                if 'swing' in inst_def_name.lower() or '2d hinged' in inst_def_name.lower() or 'in door' in inst_def_name.lower():
-                    continue
+            # Skip door panel components so doorways are open
+            dnl = inst_name.lower()
+            if 'swing' in dnl or '2d hinged' in dnl:
+                continue
 
-            traverse(inst.definition.entities, transform @ i_mat, i_layer, inst_def_name)
+            mat = inst.material.name if inst.material else parent_mat
+            traverse(inst.definition.entities, transform @ i_mat, il, inst_name, mat)
 
     traverse(model.entities)
 
-    # Build PBR submeshes with realistic materials
-    meshes = []
-    
-    mat_configs = {
-        'clapboard': {'roughness': 0.7, 'metalness': 0.05, 'color': [245, 245, 242, 255]},
-        'hardwood': {'roughness': 0.35, 'metalness': 0.05, 'color': [190, 140, 90, 255]},
-        'metal_roof': {'roughness': 0.3, 'metalness': 0.7, 'color': [50, 54, 60, 255]},
-        'brick': {'roughness': 0.85, 'metalness': 0.05, 'color': [170, 70, 50, 255]},
-        'porch_deck': {'roughness': 0.75, 'metalness': 0.05, 'color': [160, 125, 90, 255]},
-        'interior_wall': {'roughness': 0.9, 'metalness': 0.0, 'color': [245, 243, 238, 255]},
-        'trim_white': {'roughness': 0.5, 'metalness': 0.05, 'color': [250, 250, 250, 255]},
-        'fixtures': {'roughness': 0.2, 'metalness': 0.8, 'color': [220, 220, 225, 255]},
-        'glass': {'roughness': 0.05, 'metalness': 0.1, 'color': [200, 225, 245, 120]},
+    # Build PBR materials with baseColorFactor=[1,1,1,1] (100% full brightness)
+    pbr_mats = {
+        'clapboard': trimesh.visual.material.PBRMaterial(
+            name='mat_clapboard',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.6,
+            metallicFactor=0.02,
+            baseColorTexture=textures['clapboard']
+        ),
+        'porch_deck': trimesh.visual.material.PBRMaterial(
+            name='mat_porch_deck',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.5,
+            metallicFactor=0.02,
+            baseColorTexture=textures['porch_deck']
+        ),
+        'porch_ceiling': trimesh.visual.material.PBRMaterial(
+            name='mat_porch_ceiling',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.55,
+            metallicFactor=0.02,
+            baseColorTexture=textures['porch_ceiling']
+        ),
+        'hardwood': trimesh.visual.material.PBRMaterial(
+            name='mat_hardwood',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.3,
+            metallicFactor=0.02,
+            baseColorTexture=textures['hardwood']
+        ),
+        'metal_roof': trimesh.visual.material.PBRMaterial(
+            name='mat_metal_roof',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.35,
+            metallicFactor=0.75,
+            baseColorTexture=textures['metal_roof']
+        ),
+        'brick': trimesh.visual.material.PBRMaterial(
+            name='mat_brick',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.8,
+            metallicFactor=0.02,
+            baseColorTexture=textures['brick']
+        ),
+        'interior_wall': trimesh.visual.material.PBRMaterial(
+            name='mat_interior_wall',
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+            roughnessFactor=0.85,
+            metallicFactor=0.01,
+            baseColorTexture=textures['interior_wall']
+        ),
     }
 
+    color_configs = {
+        'trim_white': {'color': [250, 250, 250, 255], 'roughness': 0.45, 'metalness': 0.05, 'name': 'mat_trim_white'},
+        'glass': {'color': [200, 230, 255, 90], 'roughness': 0.05, 'metalness': 0.85, 'name': 'mat_glass'},
+        'fixtures': {'color': [210, 215, 220, 255], 'roughness': 0.25, 'metalness': 0.85, 'name': 'mat_fixtures'},
+    }
+
+    meshes = []
+    print("Submesh breakdown:")
     for cat_name, data in buckets.items():
+        n_faces = len(data['faces'])
+        print(f"  {cat_name:15s}: {n_faces:6d} faces, {len(data['verts']):6d} verts")
         if not data['faces']: continue
+
         v = np.array(data['verts'], dtype=np.float32)
         f = np.array(data['faces'], dtype=np.int32)
         uv = np.array(data['uvs'], dtype=np.float32)
 
-        cfg = mat_configs.get(cat_name, {'roughness': 0.5, 'metalness': 0.1, 'color': [200, 200, 200, 255]})
-        
-        if cat_name in textures:
-            visual = trimesh.visual.TextureVisuals(uv=uv, image=textures[cat_name])
+        if cat_name in pbr_mats:
+            mat = pbr_mats[cat_name]
+            visual = trimesh.visual.TextureVisuals(uv=uv, material=mat)
         else:
-            vertex_colors = np.tile(cfg['color'], (len(v), 1)).astype(np.uint8)
-            visual = trimesh.visual.ColorVisuals(vertex_colors=vertex_colors)
+            cfg = color_configs[cat_name]
+            vc = np.tile(cfg['color'], (len(v), 1)).astype(np.uint8)
+            visual = trimesh.visual.ColorVisuals(vertex_colors=vc)
 
         submesh = trimesh.Trimesh(vertices=v, faces=f, visual=visual, process=False)
-        submesh.metadata['material_name'] = cat_name
+        submesh.metadata['name'] = f"mesh_{cat_name}"
         meshes.append(submesh)
 
     scene = trimesh.Scene(meshes)
     glb_bytes = scene.export(file_type='glb')
+    os.makedirs(os.path.dirname(output_glb_path), exist_ok=True)
     with open(output_glb_path, 'wb') as fp:
-        fp.write(glb_bytes)
-
-    # Save to root assets/models as well
-    root_model_path = os.path.join(os.path.dirname(os.path.dirname(output_glb_path)), "assets", "models", os.path.basename(output_glb_path))
-    os.makedirs(os.path.dirname(root_model_path), exist_ok=True)
-    with open(root_model_path, 'wb') as fp:
         fp.write(glb_bytes)
 
     elapsed = time.time() - t_start
@@ -276,7 +340,7 @@ def main():
     ]
 
     print("=" * 70)
-    print("RE-EXPORTING ALL 4 MODELS WITH SEAMLESS PBR TEXTURES & OPEN DOORWAYS")
+    print("RE-EXPORTING ALL 4 MODELS WITH REALISTIC PBR TEXTURES & CLEAN MESHES")
     print("=" * 70)
 
     for h in houses:

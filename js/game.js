@@ -21,7 +21,10 @@ class HouseGame {
         this.timeOfDay = 'day'; // 'day', 'sunset', 'night'
 
         // House Models
-        this.currentHouseId = 'caroline';
+        const urlParams = new URLSearchParams(window.location.search);
+        const selectEl = document.getElementById('house-select');
+        this.currentHouseId = urlParams.get('house') || (selectEl ? selectEl.value : 'caroline');
+        if (selectEl) selectEl.value = this.currentHouseId;
         this.houseGroup = null;
         this.collisionMeshes = [];
 
@@ -100,23 +103,131 @@ class HouseGame {
         this.controls.onToggleMinimap = () => this.minimap.toggle();
         this.controls.onToggleLights = () => this.cycleLighting();
 
-        // 6. Build Environment & Lighting
+        // 6. Preload Architectural PBR Materials
+        this.texLoader = new THREE.TextureLoader();
+        this.pbrMaterials = {};
+        this.initPBRMaterials();
+
+        // 7. Build Environment & Lighting
         this.buildEnvironment();
         this.setupLighting();
 
-        // 7. Load House Model
+        // 8. Load House Model
         this.houseGroup = new THREE.Group();
         this.scene.add(this.houseGroup);
         this.loadHouseModel(this.currentHouseId);
 
-        // 8. Bind UI Events
+        // 9. Bind UI Events
         this.bindUI();
 
-        // 9. Resize listener
+        // 10. Resize listener
         window.addEventListener('resize', () => this.onResize());
 
-        // 10. Start Animation Loop
+        // 11. Start Animation Loop
         this.animate();
+    }
+
+    initPBRMaterials() {
+        const loadTex = (path, isSRGB = false) => {
+            const tex = this.texLoader.load(path);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            if (isSRGB) tex.encoding = THREE.sRGBEncoding;
+            tex.anisotropy = 16;
+            return tex;
+        };
+
+        const texConfigs = {
+            'clapboard': {
+                map: loadTex('assets/textures/clapboard_diffuse.png', true),
+                normalMap: loadTex('assets/textures/clapboard_normal.png'),
+                normalScale: new THREE.Vector2(0.95, 0.95),
+                roughness: 0.55,
+                metalness: 0.02
+            },
+            'porch_deck': {
+                map: loadTex('assets/textures/porch_deck_diffuse.png', true),
+                normalMap: loadTex('assets/textures/porch_deck_normal.png'),
+                normalScale: new THREE.Vector2(0.85, 0.85),
+                roughness: 0.5,
+                metalness: 0.02
+            },
+            'porch_ceiling': {
+                map: loadTex('assets/textures/porch_ceiling_diffuse.png', true),
+                normalMap: loadTex('assets/textures/porch_ceiling_normal.png'),
+                normalScale: new THREE.Vector2(0.75, 0.75),
+                roughness: 0.5,
+                metalness: 0.02
+            },
+            'hardwood': {
+                map: loadTex('assets/textures/hardwood_diffuse.png', true),
+                normalMap: loadTex('assets/textures/hardwood_normal.png'),
+                normalScale: new THREE.Vector2(0.65, 0.65),
+                roughness: 0.35,
+                metalness: 0.04
+            },
+            'metal_roof': {
+                map: loadTex('assets/textures/metal_roof_diffuse.png', true),
+                normalMap: loadTex('assets/textures/metal_roof_normal.png'),
+                normalScale: new THREE.Vector2(0.85, 0.85),
+                roughness: 0.35,
+                metalness: 0.75
+            },
+            'brick': {
+                map: loadTex('assets/textures/brick_diffuse.png', true),
+                normalMap: loadTex('assets/textures/brick_normal.png'),
+                normalScale: new THREE.Vector2(0.95, 0.95),
+                roughness: 0.85,
+                metalness: 0.02
+            },
+            'interior_wall': {
+                map: loadTex('assets/textures/interior_wall_diffuse.png', true),
+                roughness: 0.9,
+                metalness: 0.01
+            }
+        };
+
+        for (const [key, cfg] of Object.entries(texConfigs)) {
+            this.pbrMaterials[key] = new THREE.MeshStandardMaterial({
+                map: cfg.map || null,
+                normalMap: cfg.normalMap || null,
+                normalScale: cfg.normalScale || undefined,
+                roughness: cfg.roughness,
+                metalness: cfg.metalness,
+                color: 0xffffff,
+                side: THREE.DoubleSide,
+                shadowSide: THREE.FrontSide
+            });
+        }
+
+        // Clean white architectural trim (columns, railings, cornerboards, fascia, soffits)
+        this.pbrMaterials['trim_white'] = new THREE.MeshStandardMaterial({
+            color: 0xfbfbfb,
+            roughness: 0.45,
+            metalness: 0.04,
+            side: THREE.DoubleSide,
+            shadowSide: THREE.FrontSide
+        });
+
+        // Clear architectural window glass
+        this.pbrMaterials['glass'] = new THREE.MeshStandardMaterial({
+            color: 0xd0e8ff,
+            transparent: true,
+            opacity: 0.45,
+            roughness: 0.05,
+            metalness: 0.9,
+            side: THREE.DoubleSide,
+            shadowSide: THREE.FrontSide
+        });
+
+        // Fixtures (sinks, stoves, hardware)
+        this.pbrMaterials['fixtures'] = new THREE.MeshStandardMaterial({
+            color: 0xdcdcdc,
+            roughness: 0.25,
+            metalness: 0.85,
+            side: THREE.DoubleSide,
+            shadowSide: THREE.FrontSide
+        });
     }
 
     buildEnvironment() {
@@ -196,7 +307,8 @@ class HouseGame {
         this.sunLight.shadow.camera.right = d;
         this.sunLight.shadow.camera.top = d;
         this.sunLight.shadow.camera.bottom = -d;
-        this.sunLight.shadow.bias = -0.0005;
+        this.sunLight.shadow.bias = -0.0001;
+        this.sunLight.shadow.normalBias = 0.04;
         this.scene.add(this.sunLight);
 
         // Hemisphere Sky/Ground Ambient
@@ -206,7 +318,7 @@ class HouseGame {
 
         // Cozy Interior Warm Point Lights
         const lightPositions = [
-            { pos: [0, 1.9, 19.5], color: 0xffe0a3, intensity: 1.2, dist: 8 },  // Porch light
+            { pos: [0, 2.3, 16.0], color: 0xffe0a3, intensity: 1.0, dist: 7 },  // Porch ceiling light
             { pos: [-2, 2.2, 15.0], color: 0xffd180, intensity: 1.5, dist: 9 }, // Living room
             { pos: [2, 2.2, 14.0], color: 0xffecc4, intensity: 1.6, dist: 9 },  // Kitchen
             { pos: [0, 2.2, 11.0], color: 0xffe8c6, intensity: 1.2, dist: 7 },  // Downstairs hall
@@ -229,6 +341,11 @@ class HouseGame {
             if (this.loadingSubtext) this.loadingSubtext.textContent = `Loading ${houseId.toUpperCase()} 3D Model...`;
         }
 
+        // Initialize doors specifically for this house model
+        if (this.doors) {
+            this.doors.initDoorsForHouse(houseId);
+        }
+
         // Clear existing model
         while (this.houseGroup.children.length > 0) {
             const obj = this.houseGroup.children[0];
@@ -248,39 +365,37 @@ class HouseGame {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        if (child.geometry) {
+                            child.geometry.computeVertexNormals();
+                        }
                         this.collisionMeshes.push(child);
 
-                        // Enhance materials for realism
-                        if (child.material) {
+                        const meshName = (child.name || '').toLowerCase();
+                        const matName = (child.material && child.material.name ? child.material.name : '').toLowerCase();
+                        const combinedName = meshName + ' ' + matName;
+
+                        // Match against our preloaded PBR materials
+                        let matchedMat = null;
+                        const categories = ['clapboard', 'porch_deck', 'porch_ceiling', 'hardwood', 'metal_roof', 'brick', 'interior_wall', 'trim_white', 'glass', 'fixtures'];
+                        for (const cat of categories) {
+                            if (combinedName.includes(cat)) {
+                                matchedMat = this.pbrMaterials[cat];
+                                break;
+                            }
+                        }
+
+                        if (matchedMat) {
+                            child.material = matchedMat;
+                        } else if (child.material) {
                             child.material.side = THREE.DoubleSide;
                             if (child.material.map) {
                                 child.material.map.wrapS = THREE.RepeatWrapping;
                                 child.material.map.wrapT = THREE.RepeatWrapping;
+                                child.material.map.encoding = THREE.sRGBEncoding;
                                 child.material.map.anisotropy = 16;
                                 child.material.map.needsUpdate = true;
+                                child.material.color.setHex(0xffffff);
                             }
-                            
-                            const matName = (child.material.name || '').toLowerCase();
-                            if (matName.includes('glass') || child.material.opacity < 0.9) {
-                                child.material.transparent = true;
-                                child.material.opacity = 0.45;
-                                child.material.roughness = 0.05;
-                                child.material.metalness = 0.9;
-                                child.material.color.setHex(0xd0e8ff);
-                            } else if (matName.includes('metal') || matName.includes('roof')) {
-                                child.material.roughness = 0.35;
-                                child.material.metalness = 0.65;
-                            } else if (matName.includes('wood') || matName.includes('hardwood')) {
-                                child.material.roughness = 0.3;
-                                child.material.metalness = 0.05;
-                            } else if (matName.includes('brick') || matName.includes('chimney')) {
-                                child.material.roughness = 0.85;
-                                child.material.metalness = 0.02;
-                            } else if (matName.includes('clapboard') || matName.includes('siding')) {
-                                child.material.roughness = 0.65;
-                                child.material.metalness = 0.02;
-                            }
-                            child.material.needsUpdate = true;
                         }
                     }
                 });
