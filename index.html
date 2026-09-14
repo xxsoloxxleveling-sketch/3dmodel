@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Starter Farmhouse 3D - Playable Walkthrough</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 3D Canvas -->
+    <canvas id="canvas3d"></canvas>
+
+    <!-- First Person Crosshair -->
+    <div id="crosshair"></div>
+
+    <!-- Top Status Bar & Model Switcher -->
+    <div id="top-hud">
+        <div class="hud-pill">
+            <span class="title-badge">🏡 STARTER FARMHOUSE</span>
+            <select id="house-select" class="model-select">
+                <option value="caroline" selected>Caroline's Farmhouse</option>
+                <option value="georgia">Georgia's Farmhouse</option>
+                <option value="marilyn">Marilyn's Farmhouse</option>
+                <option value="virginia">Virginia's Farmhouse</option>
+            </select>
+        </div>
+
+        <div class="hud-actions">
+            <button id="btn-cam" class="hud-btn" title="Toggle 1st/3rd Person (C)">🎥 View (C)</button>
+            <button id="btn-tour" class="hud-btn" title="Automated House Tour (T)">✨ Tour (T)</button>
+            <button id="btn-lights" class="hud-btn" title="Cycle Day / Sunset / Night (L)">💡 DAY</button>
+            <button id="btn-map" class="hud-btn" title="Toggle Floor Plan Minimap (M)">🗺️ Map (M)</button>
+            <button id="btn-help" class="hud-btn" title="Help & Controls">❓ Controls</button>
+        </div>
+    </div>
+
+    <!-- Active Room & Floor Description Banner -->
+    <div id="room-banner">
+        <div id="room-title">Front Yard (Ground Level)</div>
+        <div id="room-desc">Enjoy the front yard and classic farmhouse facade.</div>
+    </div>
+
+    <!-- 2D Floor Plan Radar Minimap -->
+    <div id="minimap-container">
+        <div id="minimap-header">Floor 1 • Downstairs</div>
+        <canvas id="minimap-canvas"></canvas>
+    </div>
+
+    <!-- Mobile Virtual Joystick & Touch Pad -->
+    <div id="mobile-controls">
+        <div id="joystick-zone">
+            <div id="joystick-thumb"></div>
+        </div>
+        <div id="touch-look-zone"></div>
+        <div id="mobile-actions">
+            <button id="mbtn-jump" class="mobile-btn">JUMP</button>
+            <button id="mbtn-sprint" class="mobile-btn">RUN</button>
+            <button id="mbtn-view" class="mobile-btn">1P</button>
+        </div>
+    </div>
+
+    <!-- Guided Tour Floating Controls -->
+    <div id="tour-controls">
+        <button id="tour-prev" class="tour-btn">◀ Previous</button>
+        <button id="tour-pause" class="tour-btn">⏸ Pause</button>
+        <button id="tour-next" class="tour-btn">Next ▶</button>
+        <button id="tour-stop" class="tour-btn" style="background:#dc2626;">Exit Tour</button>
+    </div>
+
+    <!-- Instructions / Keybindings Modal -->
+    <div id="help-modal">
+        <h2>Starter Farmhouse 3D</h2>
+        <p>Explore Jay Osborne's open-source architectural house models in real-time 3D. Walk through rooms, climb the stairs to bedrooms, or take a guided tour.</p>
+
+        <div class="key-grid">
+            <div class="key-item">
+                <span class="key-badge">W A S D</span>
+                <span>Walk / Strafe</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">Mouse</span>
+                <span>Look / Turn</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">Space</span>
+                <span>Jump / Step</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">Shift</span>
+                <span>Sprint / Jog</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">C</span>
+                <span>1st / 3rd Person</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">T</span>
+                <span>Guided Tour</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">M</span>
+                <span>Minimap Radar</span>
+            </div>
+            <div class="key-item">
+                <span class="key-badge">L</span>
+                <span>Day / Sunset / Night</span>
+            </div>
+        </div>
+
+        <button id="btn-start-game" class="start-btn">Click to Enter & Explore</button>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div id="loading-text">Loading Farmhouse 3D Environment...</div>
+        <div id="loading-subtext">Initializing geometry and textures</div>
+    </div>
+
+    <!-- Local Three.js and Game Scripts -->
+    <script src="js/lib/three.min.js"></script>
+    <script src="js/lib/GLTFLoader.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/tour.js"></script>
+    <script src="js/minimap.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
